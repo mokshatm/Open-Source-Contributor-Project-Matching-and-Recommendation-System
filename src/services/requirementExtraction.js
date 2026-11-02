@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 import { createHash } from "node:crypto";
 
 export const REQUIREMENT_TAXONOMY = {
@@ -8,7 +8,7 @@ export const REQUIREMENT_TAXONOMY = {
     { name: "TypeScript", pattern: /\b(?:typescript|ts)\b/gi },
     { name: "Java", pattern: /\bjava\b/gi },
     { name: "C++", pattern: /(?<![\w])c\+\+(?!\w)|\bcpp\b/gi },
-    { name: "Go", pattern: /\b(?:golang|go language|go modules|go package|go code)\b/gi },
+    { name: "Go", pattern: /\b(?:golang|go language|go modules?|go packages?|go code|go implementation|go tests?|(?:code|implementation|tests?) in go|written in go|implemented in go)\b|\b(?:implement|write|add|fix|update|build|create|test|port)\w*\b.{0,48}\bin go\b/gi },
     { name: "Rust", pattern: /\brust\b/gi },
     { name: "Ruby", pattern: /\bruby\b/gi },
     { name: "PHP", pattern: /\bphp\b/gi },
@@ -126,11 +126,16 @@ function buildSources(issue) {
     { source: "issue title", text: preprocessIssueText(issue.title || "") },
     { source: "issue description", text: preprocessIssueText(issue.body || "").slice(0, 20000) },
     ...(issue.labels || []).map((label) => ({ source: "issue label", text: preprocessIssueText(label.name || "") })),
-    ...(issue.repoLanguage ? [{ source: "repository language", text: preprocessIssueText(issue.repoLanguage) }] : []),
-    ...(issue.repoTopics || []).map((topic) => ({ source: "repository topic", text: preprocessIssueText(topic) })),
-    ...(issue.repoFullName ? [{ source: "repository name", text: preprocessIssueText(issue.repoFullName.replace(/[\/-]/g, " ")) }] : []),
   ];
   return sources.filter(({ text }) => text.length > 0);
+}
+
+function buildRepositoryContext(issue) {
+  return {
+    programmingLanguage: issue.repoLanguage ? { name: issue.repoLanguage, source: "repository language", classification: "repository_context" } : null,
+    name: issue.repoFullName ? { name: issue.repoFullName, source: "repository name", classification: "repository_context" } : null,
+    topics: (issue.repoTopics || []).filter(Boolean).map((name) => ({ name, source: "repository topic", classification: "repository_context" })),
+  };
 }
 
 function quoteEvidence(text, index, length) {
@@ -162,41 +167,31 @@ function matchesForRule(rule, sources) {
   return evidence;
 }
 
-function confidenceFor(evidence) {
-  if (!evidence.length) return 0;
-  const direct = evidence.some((item) => item.source === "issue title" || item.source === "issue description");
-  const label = evidence.some((item) => item.source === "issue label");
-  if (direct && label) return 0.99;
-  if (direct) return 0.95;
-  if (label) return 0.88;
-  if (evidence.some((item) => item.source === "repository language")) return 0.78;
-  return 0.7;
-}
-
 function extractSkills(rules, sources) {
   return rules.flatMap((rule) => {
     const evidence = matchesForRule(rule, sources);
-    return evidence.length ? [{ name: rule.name, evidence, confidence: confidenceFor(evidence) }] : [];
+    if (!evidence.length) return [];
+    const classification = evidence.some((item) => item.source === "issue title" || item.source === "issue description") ? "explicit" : "inferred";
+    return [{ name: rule.name, evidence, classification }];
   });
 }
 
 function classifyDomain(sources) {
   const found = DOMAIN_RULES.flatMap((rule) => {
     const evidence = matchesForRule(rule, sources);
-    return evidence.length ? [{ value: rule.value, evidence, confidence: confidenceFor(evidence) }] : [];
+    return evidence.length ? [{ value: rule.value, evidence }] : [];
   });
   const hasFront = found.some((item) => item.value === "Frontend");
   const hasBack = found.some((item) => item.value === "Backend");
   if (hasFront && hasBack) {
     const evidence = found.filter((item) => item.value === "Frontend" || item.value === "Backend").flatMap((item) => item.evidence);
-    return { primary: "Full-stack", categories: [...found.map((item) => item.value), "Full-stack"], evidence, confidence: Math.min(...found.filter((item) => item.value === "Frontend" || item.value === "Backend").map((item) => item.confidence)) };
+    return { primary: "Full-stack", categories: [...found.map((item) => item.value), "Full-stack"], evidence };
   }
   found.sort((a, b) => b.evidence.length - a.evidence.length || a.value.localeCompare(b.value));
   return {
     primary: found[0]?.value || "Unknown",
     categories: found.map((item) => item.value),
     evidence: found.flatMap((item) => item.evidence),
-    confidence: found[0]?.confidence || 0,
   };
 }
 
@@ -209,23 +204,23 @@ function classifyTask(sources) {
     .sort((a, b) => b.evidence.length - a.evidence.length);
   const best = candidates[0];
   if (!best || (candidates[1] && candidates[1].evidence.length === best.evidence.length)) {
-    return { value: "Unknown", evidence: [], confidence: 0 };
+    return { value: "Unknown", evidence: [] };
   }
-  return { value: best.value, evidence: best.evidence, confidence: Math.min(0.96, 0.72 + best.evidence.length * 0.08) };
+  return { value: best.value, evidence: best.evidence };
 }
 
 function classifyDifficulty(sources, skills, taskCategory) {
   const labelSources = sources.filter((source) => source.source === "issue label");
   for (const [value, pattern] of Object.entries(DIFFICULTY_RULES)) {
     const evidence = matchesForRule({ pattern }, labelSources);
-    if (evidence.length) return { value, evidence, confidence: value === "Beginner" ? 0.9 : 0.88 };
+    if (evidence.length) return { value, evidence };
   }
 
   const allText = sources.filter((source) => source.source !== "repository language" && source.source !== "repository topic" && source.source !== "repository name");
   const advancedPattern = /\b(?:architect(?:ure)?|rewrite|redesign|distributed|concurren(?:cy|t)|race condition|cryptograph(?:y|ic)|kernel|protocol|migration across|breaking change|large[- ]scale)\b/gi;
   const advancedEvidence = matchesForRule({ pattern: advancedPattern }, allText);
   if (advancedEvidence.length >= 2 && (skills.technicalConcepts.length >= 2 || skills.frameworks.length + skills.databases.length >= 2)) {
-    return { value: "Advanced", evidence: advancedEvidence.slice(0, 4), confidence: 0.76 };
+    return { value: "Advanced", evidence: advancedEvidence.slice(0, 4) };
   }
 
   const text = allText.map((source) => source.text).join(" ");
@@ -234,16 +229,16 @@ function classifyDifficulty(sources, skills, taskCategory) {
   const beginnerLabelText = /\b(?:good first issue|beginner|easy|starter issue)\b/i.test(labelSources.map((source) => source.text).join(" "));
   if ((narrow && beginnerTask) || beginnerLabelText) {
     const evidence = matchesForRule({ pattern: /\b(?:small|simple|minor|typo|one[- ]line|straightforward|good first issue|beginner|easy|starter issue)\b/gi }, [...allText, ...labelSources]);
-    return { value: "Beginner", evidence, confidence: beginnerLabelText ? 0.88 : 0.68 };
+    return { value: "Beginner", evidence };
   }
 
   const scopePattern = /\b(?:add support|implement|fix|update|handle|integrat(?:e|ion)|extend)\b/gi;
   const scopeEvidence = matchesForRule({ pattern: scopePattern }, allText);
   const hasTechnicalSignal = skills.programmingLanguages.length + skills.frameworks.length + skills.databases.length + skills.technicalConcepts.length > 0;
   if (scopeEvidence.length && hasTechnicalSignal && (taskCategory.value !== "Unknown" || skills.technicalConcepts.length >= 2)) {
-    return { value: "Intermediate", evidence: scopeEvidence.slice(0, 3), confidence: 0.62 };
+    return { value: "Intermediate", evidence: scopeEvidence.slice(0, 3) };
   }
-  return { value: "Unknown", evidence: [], confidence: 0 };
+  return { value: "Unknown", evidence: [] };
 }
 
 function issueSignature(issue) {
@@ -258,7 +253,7 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 5000;
 
 export function extractIssueRequirements(issue) {
-  const cacheKey = `${issue.id}:${issueSignature(issue)}`;
+  const cacheKey = `1.1:${issue.id}:${issueSignature(issue)}`;
   const cached = extractionCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
@@ -272,21 +267,16 @@ export function extractIssueRequirements(issue) {
   const domain = classifyDomain(sources);
   const taskCategory = classifyTask(sources);
   const estimatedDifficulty = classifyDifficulty(sources, skills, taskCategory);
-  const allSkills = Object.values(skills).flat();
-  const extractionConfidence = allSkills.length
-    ? Number((allSkills.reduce((total, skill) => total + skill.confidence, 0) / allSkills.length).toFixed(2))
-    : 0;
-
   const result = {
-    schemaVersion: "1.0",
+    schemaVersion: "1.1",
     status: "complete",
     issueId: issue.id,
     url: issue.url,
     ...skills,
+    repositoryContext: buildRepositoryContext(issue),
     domain,
     taskCategory,
     estimatedDifficulty,
-    extractionConfidence,
   };
   if (extractionCache.size >= CACHE_MAX_ENTRIES) {
     const firstKey = extractionCache.keys().next().value;
@@ -304,12 +294,11 @@ export function extractRequirementsForIssues(issues) {
       return {
         ...issue,
         requirementExtraction: {
-          schemaVersion: "1.0", status: "unavailable", issueId: issue.id, url: issue.url,
+          schemaVersion: "1.1", status: "unavailable", issueId: issue.id, url: issue.url,
           programmingLanguages: [], frameworks: [], databases: [], technicalConcepts: [],
-          domain: { primary: "Unknown", categories: [], evidence: [], confidence: 0 },
-          taskCategory: { value: "Unknown", evidence: [], confidence: 0 },
-          estimatedDifficulty: { value: "Unknown", evidence: [], confidence: 0 },
-          extractionConfidence: 0,
+          domain: { primary: "Unknown", categories: [], evidence: [] },
+          taskCategory: { value: "Unknown", evidence: [] },
+          estimatedDifficulty: { value: "Unknown", evidence: [] },
         },
       };
     }

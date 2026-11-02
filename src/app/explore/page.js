@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import EligibilityExplanation from "@/components/common/EligibilityExplanation";
 const TRACKED_REPOSITORIES = ["psf/requests", "pallets/flask", "fastapi/fastapi", "pytest-dev/pytest", "django/django", "expressjs/express", "facebook/react", "vuejs/vue", "tailwindlabs/tailwindcss", "vercel/next.js", "rust-lang/rust", "golang/go", "spring-projects/spring-boot", "torvalds/linux", "rails/rails"];
 
 function deriveFilterOptions(issues) {
@@ -62,92 +63,10 @@ function labelColor(hex) {
 
 // â”€â”€â”€ Difficulty badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function DifficultyBadge({ difficulty }) {
-  const styles = {
-    Beginner: "bg-emerald-700 text-white",
-    Intermediate: "bg-sky-700 text-white",
-    Advanced: "bg-amber-700 text-white",
-    Unknown: "bg-[#1c1c20] text-[#a1a1aa]",
-  };
-  return (
-    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-xl ${styles[difficulty] || styles.Unknown}`}>
-      {difficulty || "Unknown"}
-    </span>
-  );
-}
-
-function RequirementGroup({ title, items }) {
-  return (
-    <div className="space-y-2">
-      <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#71717a]">{title}</h4>
-      {items.length > 0 ? (
-        <ul className="space-y-2">
-          {items.map((item) => (
-            <li key={item.name} className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="glass-pill text-[11px] px-2 py-0.5 rounded-md">{item.name}</span>
-                <span className="text-[10px] text-[#71717a]">{Math.round(item.confidence * 100)}% confidence</span>
-              </div>
-              {item.evidence.slice(0, 2).map((evidence, index) => (
-                <p key={`${evidence.source}-${index}`} className="text-[11px] leading-relaxed text-[#8e8e93]">
-                  <span className="text-[#71717a]">{evidence.source}: </span>“{evidence.text}”
-                </p>
-              ))}
-            </li>
-          ))}
-        </ul>
-      ) : <p className="text-[11px] text-[#71717a]">No supported requirements found.</p>}
-    </div>
-  );
-}
-
-function RequirementDetails({ extraction }) {
-  if (!extraction || extraction.status === "unavailable") {
-    return <p className="text-xs text-amber-300">Requirement extraction is unavailable for this issue.</p>;
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <RequirementGroup title="Programming languages" items={extraction.programmingLanguages} />
-        <RequirementGroup title="Frameworks and libraries" items={extraction.frameworks} />
-        <RequirementGroup title="Databases" items={extraction.databases} />
-        <RequirementGroup title="Technical concepts" items={extraction.technicalConcepts} />
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-white/[0.06] pt-3">
-        <div>
-          <span className="text-[10px] uppercase tracking-wider text-[#71717a]">Domain</span>
-          <p className="text-xs text-[#ededef] mt-1">{extraction.domain.primary}</p>
-          {extraction.domain.evidence.slice(0, 2).map((evidence, index) => (
-            <p key={`domain-${index}`} className="text-[11px] text-[#8e8e93] mt-1">{evidence.source}: “{evidence.text}”</p>
-          ))}
-        </div>
-        <div>
-          <span className="text-[10px] uppercase tracking-wider text-[#71717a]">Task category</span>
-          <p className="text-xs text-[#ededef] mt-1">{extraction.taskCategory.value}</p>
-          {extraction.taskCategory.evidence.slice(0, 2).map((evidence, index) => (
-            <p key={`task-${index}`} className="text-[11px] text-[#8e8e93] mt-1">{evidence.source}: “{evidence.text}”</p>
-          ))}
-        </div>
-        <div>
-          <span className="text-[10px] uppercase tracking-wider text-[#71717a]">Preliminary difficulty</span>
-          <p className="text-xs text-[#ededef] mt-1">{extraction.estimatedDifficulty.value}</p>
-          {extraction.estimatedDifficulty.evidence.slice(0, 2).map((evidence, index) => (
-            <p key={`difficulty-${index}`} className="text-[11px] text-[#8e8e93] mt-1">{evidence.source}: “{evidence.text}”</p>
-          ))}
-          <p className="text-[10px] text-[#71717a] mt-1">Rule-based estimate, not verified difficulty.</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// â”€â”€â”€ Issue Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
 function IssueCard({ issue }) {
   const [requirementsOpen, setRequirementsOpen] = useState(false);
-  const extraction = issue.requirementExtraction;
-  const difficulty = extraction?.estimatedDifficulty?.value || inferDifficulty(issue.labels) || "Unknown";
+
+
 
   return (
     <div className="glass-card rounded-2xl p-5 space-y-3.5 hover:border-white/[0.13] transition-all">
@@ -160,21 +79,6 @@ function IssueCard({ issue }) {
               <span className="truncate">{issue.repoFullName}</span>
             </span>
             <span>#{issue.number}</span>
-            {issue.repoStars != null && (
-              <>
-                <span>â€¢</span>
-                <span className="flex items-center gap-1">
-                  <Star className="w-3 h-3 text-[#ea6c33]" />
-                  {issue.repoStars.toLocaleString()}
-                </span>
-              </>
-            )}
-            {issue.repoLanguage && (
-              <>
-                <span>â€¢</span>
-                <span className="text-[#a1a1aa]">{issue.repoLanguage}</span>
-              </>
-            )}
           </div>
 
           {/* Title */}
@@ -183,13 +87,20 @@ function IssueCard({ issue }) {
           </h3>
         </div>
 
-        <DifficultyBadge difficulty={difficulty} />
+
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${issue.eligibility?.eligible ? "bg-emerald-950/60 text-emerald-300" : "bg-rose-950/60 text-rose-300"}`}>
+          {issue.eligibility?.eligible ? "Eligible" : "Excluded"}
+        </span>
+        {issue.eligibility?.learningOpportunities?.length > 0 && <span className="text-[10px] text-amber-300">Learning opportunity</span>}
       </div>
 
       {/* Labels */}
       {issue.labels.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {issue.labels.slice(0, 5).map((label) => {
+          {issue.labels.slice(0, 3).map((label) => {
             const { style, textClass } = labelColor(label.color);
             return (
               <span
@@ -202,9 +113,9 @@ function IssueCard({ issue }) {
               </span>
             );
           })}
-          {issue.labels.length > 5 && (
+          {issue.labels.length > 3 && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-[#1c1c20] text-[#71717a]">
-              +{issue.labels.length - 5}
+              +{issue.labels.length - 3}
             </span>
           )}
         </div>
@@ -218,12 +129,12 @@ function IssueCard({ issue }) {
           onClick={() => setRequirementsOpen((open) => !open)}
           className="flex items-center gap-2 text-[11px] font-bold text-[#ea6c33] hover:text-[#f47b45] transition-colors"
         >
-          <span>{requirementsOpen ? "Hide requirements" : "Explain requirements"}</span>
+          <span>{requirementsOpen ? "Hide explanation" : "Explain match"}</span>
           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${requirementsOpen ? "rotate-180" : ""}`} />
         </button>
         {requirementsOpen && (
           <div id={`requirements-${issue.id}`} className="mt-3 rounded-xl border border-white/[0.06] bg-black/20 p-4">
-            <RequirementDetails extraction={extraction} />
+            <EligibilityExplanation issue={issue} />
           </div>
         )}
       </div>
@@ -319,6 +230,7 @@ export default function ExplorePage() {
   const [errors, setErrors] = useState([]);
   const [rateLimitHit, setRateLimitHit] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
+  const [developerProfile, setDeveloperProfile] = useState(null);
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -342,10 +254,14 @@ export default function ExplorePage() {
     setVisibleCount(PAGE_SIZE);
 
     try {
-      const response = await fetch(`/api/github/issues${hasFetched ? "?refresh=1" : ""}`, { cache: "no-store" });
+      const savedProfile = JSON.parse(localStorage.getItem("developerEligibilityProfile") || "null");
+      if (!savedProfile?.username || !savedProfile?.gitHubData) throw new Error("Connect a GitHub profile on the Profile page before evaluating issue eligibility.");
+      setDeveloperProfile(savedProfile);
+      const response = await fetch("/api/github/eligibility", { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", body: JSON.stringify({ username: savedProfile.username, skills: savedProfile.skills || [], experienceLevel: savedProfile.experienceLevel, selectedDomains: savedProfile.selectedDomains || [], refresh: hasFetched }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Unable to fetch GitHub issues.");
       setIssues(result.issues);
+      setDeveloperProfile((profile) => ({ ...profile, evaluatedUsername: result.profile?.username }));
       setErrors(result.errors);
       setRateLimitHit(result.rateLimitHit);
       setHasFetched(true);
@@ -411,16 +327,11 @@ export default function ExplorePage() {
           <div className="flex items-center gap-2.5">
             <h1 className="text-xl font-bold tracking-tight text-[#ededef]">Explore Issues</h1>
             <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-full bg-sky-900 text-sky-300">
-              Stage 3
+              Stage 4
             </span>
           </div>
           <p className="mt-1 text-xs text-[#71717a] max-w-2xl leading-relaxed">
-            Real open issues collected from {TRACKED_REPOSITORIES.length} tracked public repositories via the GitHub REST API.
-            {issues.length > 0 && (
-              <span className="text-[#a1a1aa]">
-                {" "}Showing {filteredIssues.length.toLocaleString()} of {issues.length.toLocaleString()} collected issues.
-              </span>
-            )}
+            Real open issues are evaluated against {developerProfile?.experienceLevel || "your"} experience, detected GitHub skills, declared skills, and extracted requirements.
           </p>
         </div>
 
@@ -483,7 +394,7 @@ export default function ExplorePage() {
           {/* Filter dropdowns */}
           <div className="flex flex-wrap items-center gap-2">
             <FilterSelect
-              label="Language"
+              label="Repository language"
               options={filterOptions.languages}
               value={filterLanguage}
               onChange={(v) => { setFilterLanguage(v); setVisibleCount(PAGE_SIZE); }}
@@ -557,7 +468,7 @@ export default function ExplorePage() {
           <div>
             <p className="text-sm font-semibold text-[#ededef]">No issues loaded yet</p>
             <p className="text-xs text-[#71717a] mt-1 max-w-sm mx-auto">
-              Click <span className="font-bold text-[#ea6c33]">Fetch Issues</span> to collect real open issues from {TRACKED_REPOSITORIES.length} tracked repositories via the GitHub REST API.
+              Connect a GitHub username on the Profile page, then click <span className="font-bold text-[#ea6c33]">Fetch Issues</span> to collect real issues and evaluate eligibility.
             </p>
           </div>
           <div className="text-[11px] text-[#52525b] font-mono">
@@ -586,7 +497,7 @@ export default function ExplorePage() {
       {!loading && visibleIssues.length > 0 && (
         <div className="space-y-4">
           {visibleIssues.map((issue) => (
-            <IssueCard key={`${issue.repoFullName}-${issue.id}`} issue={issue} />
+            <IssueCard key={`${issue.repoFullName}-${issue.id}`} issue={issue} developerProfile={developerProfile} />
           ))}
 
           {/* Load more */}
@@ -628,8 +539,4 @@ export default function ExplorePage() {
     </div>
   );
 }
-
-
-
-
 

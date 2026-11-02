@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 import {
   GitBranch,
@@ -60,11 +60,35 @@ export default function ProfilePage() {
   const [skills, setSkills] = useState([]);
   const [newSkillText, setNewSkillText] = useState("");
   const [experienceLevel, setExperienceLevel] = useState("Intermediate");
+  const [profileReady, setProfileReady] = useState(false);
   const [selectedDomains, setSelectedDomains] = useState([
     "Web Frameworks & APIs",
     "Developer Tooling"
   ]);
 
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem("developerEligibilityProfile") || "null");
+        if (saved) {
+          setUsernameInput(saved.username || "");
+          setSkills(saved.skills || []);
+          setExperienceLevel(saved.experienceLevel || "Intermediate");
+          setSelectedDomains(saved.selectedDomains || ["Web Frameworks & APIs", "Developer Tooling"]);
+          setGitHubData(saved.gitHubData || null);
+        }
+      } catch {
+        localStorage.removeItem("developerEligibilityProfile");
+      }
+      setProfileReady(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (profileReady) localStorage.setItem("developerEligibilityProfile", JSON.stringify({ username: usernameInput, skills, experienceLevel, selectedDomains, gitHubData }));
+  }, [profileReady, usernameInput, skills, experienceLevel, selectedDomains, gitHubData]);
 
   // Handle GitHub API fetch
   const handleConnectGitHub = async (e) => {
@@ -241,93 +265,30 @@ export default function ProfilePage() {
                       @{gitHubData.profile.username}
                     </span>
                   </div>
-                  <p className="text-xs text-[#8e8e93] line-clamp-1 mt-0.5">
-                    {gitHubData.profile.bio}
-                  </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 text-xs font-mono text-[#8e8e93] shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-white/[0.06]">
-                <div className="text-center sm:text-right">
-                  <span className="block font-bold text-[#ededef]">
-                    {gitHubData.profile.publicReposCount}
-                  </span>
-                  <span className="text-[10px] text-[#71717a]">Public Repos</span>
-                </div>
-                <div className="text-center sm:text-right">
-                  <span className="block font-bold text-[#ededef]">
-                    {gitHubData.profile.followersCount}
-                  </span>
-                  <span className="text-[10px] text-[#71717a]">Followers</span>
-                </div>
-                <a
-                  href={gitHubData.profile.profileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-1.5 rounded-lg text-[#71717a] hover:text-[#ededef] hover:bg-white/[0.05]"
-                  title="View GitHub profile"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
+              <a href={gitHubData.profile.profileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-[#ea6c33] hover:text-[#f47b45]">View GitHub profile</a>
             </div>
           )}
         </div>
 
-        {/* 3. Middle Row: Detected Languages & Experience Level */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-white/[0.06]">
-          {/* Detected Languages */}
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-[#ededef]">
-              Detected languages
-            </h3>
-            <p className="text-xs text-[#a1a1aa] leading-relaxed">
-              {gitHubData?.detectedLanguages?.length > 0
-                ? gitHubData.detectedLanguages.map((l) => l.name).join(" â€¢ ")
-                : gitHubData ? "No languages detected in the fetched repositories." : "Connect a GitHub profile to detect languages."}
-            </p>
-            <p className="text-[11px] text-[#71717a] leading-tight">
-              Observed in public repository language statistics. (Research note: Not presented as verified developer proficiency).
-            </p>
+
+        <div className="space-y-2.5 pt-4 border-t border-white/[0.06]">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-[#ededef]">Experience level</h3>
+            <span className="text-[11px] text-[#71717a]">Used to contextualize issue difficulty</span>
           </div>
-
-          {/* Experience Level Selector */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[#ededef]">
-                Experience level
-              </h3>
-              <span className="text-xs text-[#71717a] font-mono">User-selected</span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              {EXPERIENCE_LEVELS.map((lvl) => {
-                const isSelected = experienceLevel === lvl.id;
-                return (
-                  <button
-                    key={lvl.id}
-                    type="button"
-                    onClick={() => setExperienceLevel(lvl.id)}
-                    className={`p-2.5 rounded-xl text-center transition-all cursor-pointer ${
-                      isSelected
-                        ? "bg-[#ea6c33] text-white shadow-md"
-                        : "bg-[#1c1c20] text-[#8e8e93] hover:bg-[#242428] hover:text-[#d4d4d8]"
-                    }`}
-                  >
-                    <span className="block text-xs font-bold">{lvl.label}</span>
-                    <span className={`block text-[9px] leading-tight mt-0.5 font-mono ${
-                      isSelected ? "text-white/70" : "text-[#71717a]"
-                    }`}>
-                      {lvl.desc.split("/")[0]}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+          <div className="grid grid-cols-3 gap-2">
+            {EXPERIENCE_LEVELS.map((lvl) => (
+              <button key={lvl.id} type="button" onClick={() => setExperienceLevel(lvl.id)} className={`p-2.5 rounded-xl text-center transition-all cursor-pointer ${experienceLevel === lvl.id ? "bg-[#ea6c33] text-white" : "bg-[#1c1c20] text-[#8e8e93] hover:bg-[#242428] hover:text-[#d4d4d8]"}`}>
+                <span className="block text-xs font-bold">{lvl.label}</span>
+                <span className={`block text-[9px] leading-tight mt-0.5 font-mono ${experienceLevel === lvl.id ? "text-white/70" : "text-[#71717a]"}`}>{lvl.desc.split("/")[0]}</span>
+              </button>
+            ))}
           </div>
         </div>
-
-        {/* 4. Domain & Technical Interests Selector */}
+        {/* 3. Experience level and interests */}
         <div className="space-y-2.5 pt-4 border-t border-white/[0.06]">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-[#ededef]">
@@ -447,5 +408,4 @@ export default function ProfilePage() {
     </div>
   );
 }
-
 
