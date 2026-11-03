@@ -95,6 +95,8 @@ function IssueCard({ issue }) {
           {issue.eligibility?.eligible ? "Eligible" : "Excluded"}
         </span>
         {issue.eligibility?.learningOpportunities?.length > 0 && <span className="text-[10px] text-amber-300">Learning opportunity</span>}
+        {issue.rankingPosition && <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-violet-950/60 text-violet-200">Rank #{issue.rankingPosition}</span>}
+        {issue.match?.score !== null && issue.match?.score !== undefined && <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-sky-950/60 text-sky-200">{issue.match.score}/100 match</span>}
       </div>
 
       {/* Labels */}
@@ -260,7 +262,7 @@ export default function ExplorePage() {
       const response = await fetch("/api/github/eligibility", { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", body: JSON.stringify({ username: savedProfile.username, skills: savedProfile.skills || [], experienceLevel: savedProfile.experienceLevel, selectedDomains: savedProfile.selectedDomains || [], refresh: hasFetched }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Unable to fetch GitHub issues.");
-      setIssues(result.issues);
+      setIssues(result.recommendations || result.issues);
       setDeveloperProfile((profile) => ({ ...profile, evaluatedUsername: result.profile?.username }));
       setErrors(result.errors);
       setRateLimitHit(result.rateLimitHit);
@@ -433,8 +435,8 @@ export default function ExplorePage() {
           {/* Live results count */}
           <p className="text-[11px] text-[#71717a] font-mono">
             {filteredIssues.length === issues.length
-              ? `${issues.length.toLocaleString()} issues collected`
-              : `${filteredIssues.length.toLocaleString()} of ${issues.length.toLocaleString()} issues match`}
+              ? `${issues.length.toLocaleString()} eligible recommendations`
+              : `${filteredIssues.length.toLocaleString()} of ${issues.length.toLocaleString()} recommendations match`}
           </p>
         </div>
       )}
@@ -490,6 +492,13 @@ export default function ExplorePage() {
           >
             Clear all filters
           </button>
+        </div>
+      )}
+
+      {!loading && hasFetched && issues.length === 0 && (
+        <div className="glass-panel rounded-2xl p-10 text-center space-y-3">
+          <p className="text-sm font-semibold text-[#ededef]">No eligible recommendations available</p>
+          <p className="text-xs text-[#71717a]">No usable open issues were returned for the tracked repositories. Refresh to try again later.</p>
         </div>
       )}
 

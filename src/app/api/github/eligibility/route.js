@@ -3,6 +3,8 @@ import { collectGitHubIssues, TRACKED_REPOSITORIES } from "@/services/githubIssu
 import { fetchGitHubProfile, GitHubApiError } from "@/services/github";
 import { extractRequirementsForIssues } from "@/services/requirementExtraction";
 import { evaluateIssuesEligibility } from "@/services/eligibility";
+import { matchIssuesToDeveloper, recommendIssuesToDeveloper } from "@/services/matching";
+import { rankRecommendations } from "@/services/ranking";
 
 export async function POST(request) {
   try {
@@ -15,13 +17,16 @@ export async function POST(request) {
     const profile = {
       ...githubProfile,
       skills: Array.isArray(body.skills) ? body.skills : [],
-      experienceLevel: ["Beginner", "Intermediate", "Advanced"].includes(body.experienceLevel) ? body.experienceLevel : "Intermediate",
+      experienceLevel: ["Beginner", "Intermediate", "Advanced"].includes(body.experienceLevel) ? body.experienceLevel : "Unknown",
       selectedDomains: Array.isArray(body.selectedDomains) ? body.selectedDomains : [],
     };
     const issues = extractRequirementsForIssues(collected.issues);
+    const eligibleIssues = evaluateIssuesEligibility(issues, profile);
+    const matchedIssues = matchIssuesToDeveloper(eligibleIssues, profile);
     return NextResponse.json({
       ...collected,
-      issues: evaluateIssuesEligibility(issues, profile),
+      issues: matchedIssues,
+      recommendations: rankRecommendations(recommendIssuesToDeveloper(eligibleIssues, profile)),
       profile: { username: githubProfile.profile.username, experienceLevel: profile.experienceLevel },
       trackedRepositories: TRACKED_REPOSITORIES.length,
     });

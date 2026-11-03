@@ -10,7 +10,8 @@ import {
   Compass,
   Layers,
   GitPullRequest,
-  Boxes
+  Boxes,
+  BarChart3
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -43,6 +44,11 @@ const NAV_ITEMS = [
     name: "My Contributions",
     href: "/contributions",
     icon: GitPullRequest,
+  },
+  {
+    name: "Evaluation",
+    href: "/evaluation",
+    icon: BarChart3,
   },
 ];
 

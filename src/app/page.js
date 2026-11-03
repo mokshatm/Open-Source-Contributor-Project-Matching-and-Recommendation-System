@@ -27,7 +27,7 @@ export default function DashboardPage() {
 
       <div className="glass-panel rounded-2xl p-5 flex items-start gap-3">
         <GitBranch className="w-4 h-4 text-[#71717a] shrink-0 mt-0.5" />
-        <p className="text-xs text-[#8e8e93] leading-relaxed">Issue collection, requirement extraction, and candidate eligibility are available. Personalized ranking has not been implemented.</p>
+        <p className="text-xs text-[#8e8e93] leading-relaxed">Issues are collected, checked for eligibility, matched to your profile, and ranked by compatibility in Explore Issues.</p>
       </div>
     </div>
   );
