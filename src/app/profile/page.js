@@ -87,7 +87,10 @@ export default function ProfilePage() {
   }, []);
 
   useEffect(() => {
-    if (profileReady) localStorage.setItem("developerEligibilityProfile", JSON.stringify({ username: usernameInput, skills, experienceLevel, selectedDomains, gitHubData }));
+    if (profileReady) {
+      localStorage.setItem("developerEligibilityProfile", JSON.stringify({ username: usernameInput, skills, experienceLevel, selectedDomains, gitHubData }));
+      window.dispatchEvent(new Event("osmatcher-profile-change"));
+    }
   }, [profileReady, usernameInput, skills, experienceLevel, selectedDomains, gitHubData]);
 
   // Handle GitHub API fetch
@@ -172,31 +175,25 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
-      {/* 1. Header & Stage 1 Identification */}
-      <div className="glass-panel rounded-2xl p-6 space-y-6">
+      {/* Developer profile setup */}
+      <div className="glass-panel rounded-2xl p-7 space-y-7">
         <div className="flex items-center justify-between pb-4 border-b border-white/[0.06]">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-[#ededef]">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#ededef]">
               Developer Profiling
             </h1>
-            <p className="text-xs text-[#71717a] mt-1">
-              Constructing a developer profile by combining observed public GitHub activity with declared proficiencies.
-            </p>
           </div>
-          <span className="text-xs font-mono font-medium px-2.5 py-1 rounded-full bg-sky-950/40 text-sky-400 border border-sky-800/40 shadow-sm">
-            Stage 1
-          </span>
         </div>
 
         {/* 2. Connect GitHub Form */}
         <div className="space-y-3">
           <div>
-            <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717a] block">
+            <span className="text-sm font-mono uppercase tracking-wider text-[#71717a] block">
               CONNECT GITHUB
             </span>
             <label
               htmlFor="github-username"
-              className="text-sm font-semibold text-[#ededef] block mt-1"
+              className="text-base font-semibold text-[#ededef] block mt-1"
             >
               Enter your GitHub username
             </label>
@@ -213,18 +210,18 @@ export default function ProfilePage() {
                 value={usernameInput}
                 onChange={(e) => setUsernameInput(e.target.value)}
                 placeholder="github-username (e.g. torvalds, tiangolo, octocat)"
-                className="w-full glass-input text-xs text-[#ededef] pl-10 pr-4 py-2.5 rounded-xl placeholder-[#52525b] focus:outline-none focus:border-white/[0.2] transition-all"
+                className="w-full glass-input text-sm text-[#ededef] pl-10 pr-4 py-3 rounded-xl placeholder-[#52525b] focus:outline-none focus:border-white/[0.2] transition-all"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shrink-0"
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shrink-0"
             >
               {loading ? (
                 <>
-                  <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                  <RotateCw className="w-4 h-4 animate-spin" />
                   <span>Fetching...</span>
                 </>
               ) : (
@@ -235,7 +232,7 @@ export default function ProfilePage() {
 
           {/* Error Message */}
           {error && (
-            <div className="p-3.5 rounded-xl bg-red-950/30 border border-red-900/40 text-xs text-red-300 flex items-center gap-2.5">
+            <div className="p-4 rounded-xl bg-red-950/30 border border-red-900/40 text-sm text-red-300 flex items-center gap-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
               <span>{error}</span>
             </div>
@@ -252,23 +249,23 @@ export default function ProfilePage() {
                     className="w-12 h-12 rounded-full border border-white/[0.1] object-cover"
                   />
                 ) : (
-                  <div className="w-12 h-12 rounded-full bg-white/[0.08] flex items-center justify-center text-sm font-bold text-[#ededef]">
+                  <div className="w-12 h-12 rounded-full bg-white/[0.08] flex items-center justify-center text-base font-bold text-[#ededef]">
                     {gitHubData.profile.username.slice(0, 2).toUpperCase()}
                   </div>
                 )}
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-[#ededef]">
+                    <h3 className="text-base font-bold text-[#ededef]">
                       {gitHubData.profile.name}
                     </h3>
-                    <span className="text-xs text-[#71717a] font-mono">
+                    <span className="text-sm text-[#71717a] font-mono">
                       @{gitHubData.profile.username}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <a href={gitHubData.profile.profileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-[#ea6c33] hover:text-[#f47b45]">View GitHub profile</a>
+              <a href={gitHubData.profile.profileUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-[#ea6c33] hover:text-[#f47b45]">View GitHub profile</a>
             </div>
           )}
         </div>
@@ -276,14 +273,13 @@ export default function ProfilePage() {
 
         <div className="space-y-2.5 pt-4 border-t border-white/[0.06]">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[#ededef]">Experience level</h3>
-            <span className="text-[11px] text-[#71717a]">Used to contextualize issue difficulty</span>
+            <h3 className="text-lg font-bold text-[#ededef]">Experience level</h3>
           </div>
           <div className="grid grid-cols-3 gap-2">
             {EXPERIENCE_LEVELS.map((lvl) => (
-              <button key={lvl.id} type="button" onClick={() => setExperienceLevel(lvl.id)} className={`p-2.5 rounded-xl text-center transition-all cursor-pointer ${experienceLevel === lvl.id ? "bg-[#ea6c33] text-white" : "bg-[#1c1c20] text-[#8e8e93] hover:bg-[#242428] hover:text-[#d4d4d8]"}`}>
-                <span className="block text-xs font-bold">{lvl.label}</span>
-                <span className={`block text-[9px] leading-tight mt-0.5 font-mono ${experienceLevel === lvl.id ? "text-white/70" : "text-[#71717a]"}`}>{lvl.desc.split("/")[0]}</span>
+              <button key={lvl.id} type="button" onClick={() => setExperienceLevel(lvl.id)} className={`p-3 rounded-xl text-center transition-all cursor-pointer ${experienceLevel === lvl.id ? "bg-[#ea6c33] text-white" : "bg-[#1c1c20] text-[#8e8e93] hover:bg-[#242428] hover:text-[#d4d4d8]"}`}>
+                <span className="block text-sm font-bold">{lvl.label}</span>
+                <span className={`block text-sm leading-tight mt-0.5 font-mono ${experienceLevel === lvl.id ? "text-white/70" : "text-[#71717a]"}`}>{lvl.desc.split("/")[0]}</span>
               </button>
             ))}
           </div>
@@ -291,10 +287,10 @@ export default function ProfilePage() {
         {/* 3. Experience level and interests */}
         <div className="space-y-2.5 pt-4 border-t border-white/[0.06]">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[#ededef]">
+            <h3 className="text-base font-semibold text-[#ededef]">
               Technical Interests & Domains
             </h3>
-            <span className="text-xs text-[#71717a]">
+            <span className="text-sm text-[#71717a]">
               Select domains to calibrate project recommendations
             </span>
           </div>
@@ -307,7 +303,7 @@ export default function ProfilePage() {
                   key={domain}
                   type="button"
                   onClick={() => handleToggleDomain(domain)}
-                  className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-colors cursor-pointer ${
+                  className={`text-sm px-4 py-2 rounded-xl font-bold transition-colors cursor-pointer ${
                     isSelected
                       ? "bg-[#ea6c33] text-white"
                       : "bg-[#1c1c20] text-[#8e8e93] hover:bg-[#242428] hover:text-[#ededef]"
@@ -324,12 +320,9 @@ export default function ProfilePage() {
         <div className="space-y-4 pt-4 border-t border-white/[0.06]">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-[#ededef]">
+              <h2 className="text-base font-semibold text-[#ededef]">
                 Skill evidence
               </h2>
-              <p className="text-xs text-[#71717a]">
-                Transparently distinguishing observed public repository activity from user-declared skills.
-              </p>
             </div>
 
             {/* Inline Add Skill Form */}
@@ -339,11 +332,11 @@ export default function ProfilePage() {
                 value={newSkillText}
                 onChange={(e) => setNewSkillText(e.target.value)}
                 placeholder="Add skill (e.g. Docker, PyTorch)"
-                className="glass-input text-xs text-[#ededef] px-3 py-1.5 rounded-lg placeholder-[#52525b] focus:outline-none w-48"
+                className="glass-input text-sm text-[#ededef] px-3 py-2.5 rounded-lg placeholder-[#52525b] focus:outline-none w-48"
               />
               <button
                 type="submit"
-                className="p-1.5 rounded-lg bg-[#1c1c20] hover:bg-[#2a2a2e] text-[#ededef] text-xs font-bold cursor-pointer transition-colors"
+                className="p-2 rounded-lg bg-[#1c1c20] hover:bg-[#2a2a2e] text-[#ededef] text-sm font-bold cursor-pointer transition-colors"
                 title="Add declared skill"
               >
                 <Plus className="w-4 h-4" />
@@ -356,31 +349,31 @@ export default function ProfilePage() {
             {skills.map((skill) => (
               <div
                 key={skill.name}
-                className="p-4 rounded-xl bg-black/20 border border-white/[0.05] flex items-start justify-between gap-4 hover:border-white/[0.09] transition-colors"
+                className="p-5 rounded-xl bg-black/20 border border-white/[0.05] flex items-start justify-between gap-4 hover:border-white/[0.09] transition-colors"
               >
                 <div className="space-y-1 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-[#ededef]">
+                    <span className="text-base font-semibold text-[#ededef]">
                       {skill.name}
                     </span>
                     {skill.source === "repository" && (
-                      <span className="text-[11px] font-mono text-[#71717a]">
-                        â€¢ {skill.repoCount} {skill.repoCount === 1 ? "repository" : "repositories"}
+                      <span className="text-sm font-mono text-[#71717a]">
+                        • {skill.repoCount} {skill.repoCount === 1 ? "repository" : "repositories"}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#8e8e93] leading-relaxed">
+                  <p className="text-sm text-[#8e8e93] leading-relaxed">
                     {skill.evidence}
                   </p>
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
                   {skill.source === "repository" ? (
-                    <span className="text-[11px] font-bold px-3 py-1 rounded-xl bg-emerald-700 text-white">
+                    <span className="text-sm font-bold px-3.5 py-1.5 rounded-xl bg-emerald-700 text-white">
                       Repository evidence
                     </span>
                   ) : (
-                    <span className="text-[11px] font-bold px-3 py-1 rounded-xl bg-sky-700 text-white">
+                    <span className="text-sm font-bold px-3.5 py-1.5 rounded-xl bg-sky-700 text-white">
                       Manually added
                     </span>
                   )}
@@ -388,17 +381,17 @@ export default function ProfilePage() {
                   <button
                     type="button"
                     onClick={() => handleRemoveSkill(skill.name)}
-                    className="p-1 rounded text-[#71717a] hover:text-red-400 hover:bg-white/[0.04] transition-colors cursor-pointer"
+                    className="p-1.5 rounded text-[#71717a] hover:text-red-400 hover:bg-white/[0.04] transition-colors cursor-pointer"
                     title={`Remove ${skill.name}`}
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             ))}
 
             {skills.length === 0 && (
-              <div className="p-6 rounded-xl border border-dashed border-white/[0.08] text-center text-xs text-[#71717a]">
+              <div className="p-7 rounded-xl border border-dashed border-white/[0.08] text-center text-sm text-[#71717a]">
                 No skills registered yet. Connect your GitHub username above or manually add skills.
               </div>
             )}

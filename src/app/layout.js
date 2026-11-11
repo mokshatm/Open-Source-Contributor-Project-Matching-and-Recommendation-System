@@ -23,9 +23,9 @@ export default function RootLayout({ children }) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-[#0e0e10] text-[#ededef] flex flex-row">
+      <body className="app-shell min-h-full flex flex-row">
         {/* Persistent Linear-inspired sidebar */}
         <Sidebar />
 

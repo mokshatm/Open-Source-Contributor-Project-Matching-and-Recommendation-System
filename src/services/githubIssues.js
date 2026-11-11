@@ -1,5 +1,5 @@
-﻿import "server-only";
-import { githubRequest, assertGitHubToken, GitHubApiError } from "@/services/github";
+import "server-only";
+import { githubRequest, assertGitHubToken, fetchGitHubOrganizationRepositories, GitHubApiError } from "@/services/github";
 
 export const TRACKED_REPOSITORIES = [
   "psf/requests", "pallets/flask", "fastapi/fastapi", "pytest-dev/pytest", "django/django",
@@ -35,9 +35,8 @@ async function fetchRepoIssues(fullName, repo, perPage, maxPages) {
   return issues;
 }
 
-let issuesCache = null;
-let issuesCacheExpires = 0;
-let issuesInFlight = null;
+const issuesCache = new Map();
+const issuesInFlight = new Map();
 
 async function collectFresh({ repos, perPage, maxPages, concurrency }) {
   const allIssues = [];
@@ -78,17 +77,67 @@ async function collectFresh({ repos, perPage, maxPages, concurrency }) {
 
 export async function collectGitHubIssues({ repos = TRACKED_REPOSITORIES, perPage = 100, maxPages = 2, concurrency = 4, forceRefresh = false } = {}) {
   assertGitHubToken();
-  if (!forceRefresh && issuesCache && Date.now() < issuesCacheExpires) return issuesCache;
-  if (!forceRefresh && issuesInFlight) return issuesInFlight;
-  issuesInFlight = collectFresh({ repos, perPage, maxPages, concurrency });
+  const cacheKey = JSON.stringify({ repos: [...new Set(repos)].sort(), perPage, maxPages, concurrency });
+  const cached = issuesCache.get(cacheKey);
+  if (!forceRefresh && cached && Date.now() < cached.expiresAt) return cached.result;
+  if (!forceRefresh && issuesInFlight.has(cacheKey)) return issuesInFlight.get(cacheKey);
+  const request = collectFresh({ repos, perPage, maxPages, concurrency });
+  issuesInFlight.set(cacheKey, request);
   try {
-    const result = await issuesInFlight;
-    issuesCache = result;
-    issuesCacheExpires = Date.now() + 60_000;
+    const result = await request;
+    issuesCache.set(cacheKey, { result, expiresAt: Date.now() + 60_000 });
+    if (issuesCache.size > 30) issuesCache.delete(issuesCache.keys().next().value);
     return result;
   } finally {
-    issuesInFlight = null;
+    if (issuesInFlight.get(cacheKey) === request) issuesInFlight.delete(cacheKey);
   }
+}
+
+export async function collectOrganizationGitHubIssues(organizations = [], options = {}) {
+  const orgs = [...new Set(organizations.map((value) => String(value || "").trim()).filter(Boolean))];
+  if (!orgs.length) throw new GitHubApiError("Add at least one target GitHub organization.", 400);
+  if (orgs.length > 20) throw new GitHubApiError("Target at most 20 GitHub organizations at a time.", 400);
+  const resolved = await Promise.allSettled(orgs.map(async (organization) => ({ organization, ...(await fetchGitHubOrganizationRepositories(organization)) })));
+  const repositoryGroups = [];
+  const errors = [];
+  let truncatedOrganizations = 0;
+  for (let index = 0; index < resolved.length; index += 1) {
+    const result = resolved[index];
+    if (result.status === "rejected") {
+      errors.push(`${orgs[index]} organization: ${result.reason?.message || "Unable to list organization repositories."}`);
+      continue;
+    }
+    repositoryGroups.push({ organization: orgs[index], repositories: result.value.repositories, truncated: result.value.truncated });
+  }
+  const uniqueRepositories = [];
+  const uniqueSet = new Set();
+  const cursors = repositoryGroups.map(() => 0);
+  while (uniqueRepositories.length < 50) {
+    let added = false;
+    for (let index = 0; index < repositoryGroups.length && uniqueRepositories.length < 50; index += 1) {
+      const group = repositoryGroups[index];
+      const candidate = group.repositories[cursors[index]++];
+      if (candidate) {
+        added = true;
+        if (!uniqueSet.has(candidate)) { uniqueSet.add(candidate); uniqueRepositories.push(candidate); }
+      }
+    }
+    if (!added) break;
+  }
+  for (let index = 0; index < repositoryGroups.length; index += 1) {
+    if (repositoryGroups[index].truncated || cursors[index] < repositoryGroups[index].repositories.length) truncatedOrganizations += 1;
+  }
+  const collected = uniqueRepositories.length
+    ? await collectGitHubIssues({ ...options, repos: uniqueRepositories })
+    : { issues: [], errors: [], rateLimitHit: false };
+  return {
+    ...collected,
+    errors: [...errors, ...collected.errors],
+    warnings: truncatedOrganizations ? [`Repository collection is capped to 50 recently updated repositories across the selected organizations (${truncatedOrganizations} organization list(s) truncated).`] : [],
+    trackedRepositories: uniqueRepositories.length,
+    targetOrganizations: orgs,
+    truncatedOrganizations,
+  };
 }
 
 export function deriveFilterOptions(issues) {

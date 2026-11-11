@@ -101,6 +101,13 @@ export async function fetchGitHubProfile(username) {
   };
 }
 
+export async function fetchGitHubOrganizationRepositories(username) {
+  const cleanUsername = String(username || "").trim();
+  if (!cleanUsername || !/^[a-zA-Z0-9-]{1,39}$/.test(cleanUsername)) throw new GitHubApiError("Enter a valid GitHub organization username.", 400);
+  const result = await fetchPages(`/orgs/${encodeURIComponent(cleanUsername)}/repos?per_page=100&sort=updated&type=public`, 5);
+  return { repositories: result.items.map((repo) => repo.full_name).filter(Boolean), truncated: result.truncated };
+}
+
 export async function fetchGitHubRateLimit() {
   return (await githubRequest("/rate_limit")).json();
 }

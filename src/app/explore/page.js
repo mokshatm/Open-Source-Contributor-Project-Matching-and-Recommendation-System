@@ -1,7 +1,11 @@
-﻿"use client";
+"use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import EligibilityExplanation from "@/components/common/EligibilityExplanation";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import EnvironmentTags from "@/components/common/EnvironmentTags";
+import IssueMatchFacts from "@/components/common/IssueMatchFacts";
+import SaveIssueButton from "@/components/contributions/SaveIssueButton";
+import { readRecommendationScope } from "@/services/recommendationScope";
+import { applyDeveloperPersona, getActivePersonaId } from "@/services/developerPersonas";
 const TRACKED_REPOSITORIES = ["psf/requests", "pallets/flask", "fastapi/fastapi", "pytest-dev/pytest", "django/django", "expressjs/express", "facebook/react", "vuejs/vue", "tailwindlabs/tailwindcss", "vercel/next.js", "rust-lang/rust", "golang/go", "spring-projects/spring-boot", "torvalds/linux", "rails/rails"];
 
 function deriveFilterOptions(issues) {
@@ -21,9 +25,6 @@ import {
   Search,
   ExternalLink,
   RefreshCw,
-  MessageSquare,
-  Clock,
-  Star,
   Tag,
   ChevronDown,
   X,
@@ -33,47 +34,17 @@ import {
   Filter,
 } from "lucide-react";
 
-// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function timeAgo(dateString) {
-  if (!dateString) return "â€”";
-  const seconds = Math.floor((Date.now() - new Date(dateString)) / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  return `${Math.floor(months / 12)}y ago`;
-}
+// ─── Difficulty badge ─────────────────────────────────────────────────────────
 
-function labelColor(hex) {
-  if (!hex) return { bg: "bg-[#1c1c20]", text: "text-[#a1a1aa]" };
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  // Determine luminance to pick text color
-  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-  const textClass = luminance > 140 ? "text-[#0e0e10]" : "text-white";
-  return { style: { backgroundColor: `#${hex}` }, textClass };
-}
-
-// â”€â”€â”€ Difficulty badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-function IssueCard({ issue }) {
-  const [requirementsOpen, setRequirementsOpen] = useState(false);
-
-
-
+function IssueCard({ issue, developerProfile }) {
   return (
-    <div className="glass-card rounded-2xl p-5 space-y-3.5 hover:border-white/[0.13] transition-all">
+    <div className="glass-card rounded-2xl p-6 space-y-4 hover:border-white/[0.13] transition-all">
       {/* Top row: repo + issue number + difficulty */}
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1 min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-[11px] text-[#71717a] flex-wrap font-mono">
+          <div className="flex items-center gap-2 text-xs text-[#71717a] flex-wrap font-mono">
             <span className="flex items-center gap-1 text-[#a1a1aa] font-medium">
               <GitBranch className="w-3 h-3 shrink-0" />
               <span className="truncate">{issue.repoFullName}</span>
@@ -82,7 +53,7 @@ function IssueCard({ issue }) {
           </div>
 
           {/* Title */}
-          <h3 className="text-sm font-semibold text-[#ededef] leading-snug line-clamp-2">
+          <h3 className="text-lg font-bold text-[#ededef] leading-snug line-clamp-2">
             {issue.title}
           </h3>
         </div>
@@ -90,85 +61,59 @@ function IssueCard({ issue }) {
 
       </div>
 
-      <div className="flex items-center gap-2">
-        <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${issue.eligibility?.eligible ? "bg-emerald-950/60 text-emerald-300" : "bg-rose-950/60 text-rose-300"}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border ${issue.eligibility?.eligible ? "bg-emerald-950/30 text-emerald-200 border-emerald-900/50" : "bg-rose-950/25 text-rose-200 border-rose-900/40"}`}>
           {issue.eligibility?.eligible ? "Eligible" : "Excluded"}
         </span>
-        {issue.eligibility?.learningOpportunities?.length > 0 && <span className="text-[10px] text-amber-300">Learning opportunity</span>}
-        {issue.rankingPosition && <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-violet-950/60 text-violet-200">Rank #{issue.rankingPosition}</span>}
-        {issue.match?.score !== null && issue.match?.score !== undefined && <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-sky-950/60 text-sky-200">{issue.match.score}/100 match</span>}
+        {issue.eligibility?.learningOpportunities?.length > 0 && <span className="text-xs font-medium px-2.5 py-1.5 rounded-lg border border-amber-900/40 bg-amber-950/20 text-amber-200">Learning opportunity</span>}
+        {issue.rankingPosition && <span className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-violet-900/40 bg-violet-950/25 text-violet-200">Rank #{issue.rankingPosition}</span>}
+        {issue.match?.score !== null && issue.match?.score !== undefined && <span className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-sky-900/40 bg-sky-950/25 text-sky-200">{issue.match.score}/100 match</span>}
       </div>
 
       {/* Labels */}
       {issue.labels.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {issue.labels.slice(0, 3).map((label) => {
-            const { style, textClass } = labelColor(label.color);
-            return (
+          {issue.labels.slice(0, 3).map((label) => (
               <span
                 key={label.name}
-                style={style}
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${textClass}`}
+                className="text-xs font-medium px-2.5 py-1 rounded-lg border border-white/[0.08] bg-white/[0.035] text-[#c4c4ca]"
                 title={label.description || label.name}
               >
                 {label.name}
               </span>
-            );
-          })}
+          ))}
           {issue.labels.length > 3 && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-[#1c1c20] text-[#71717a]">
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-white/[0.06] bg-[#1c1c20] text-[#8e8e93]">
               +{issue.labels.length - 3}
             </span>
           )}
         </div>
       )}
 
-      <div>
-        <button
-          type="button"
-          aria-expanded={requirementsOpen}
-          aria-controls={`requirements-${issue.id}`}
-          onClick={() => setRequirementsOpen((open) => !open)}
-          className="flex items-center gap-2 text-[11px] font-bold text-[#ea6c33] hover:text-[#f47b45] transition-colors"
-        >
-          <span>{requirementsOpen ? "Hide explanation" : "Explain match"}</span>
-          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${requirementsOpen ? "rotate-180" : ""}`} />
-        </button>
-        {requirementsOpen && (
-          <div id={`requirements-${issue.id}`} className="mt-3 rounded-xl border border-white/[0.06] bg-black/20 p-4">
-            <EligibilityExplanation issue={issue} />
-          </div>
-        )}
-      </div>
+      <EnvironmentTags requirements={issue.environmentRequirements} />
+
+      <IssueMatchFacts issue={issue} profile={developerProfile} />
 
       {/* Footer row: timestamps, comments, action */}
-      <div className="flex items-center justify-between pt-0.5 text-[11px] text-[#71717a]">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            Updated {timeAgo(issue.updatedAt)}
-          </span>
-          <span className="flex items-center gap-1">
-            <MessageSquare className="w-3 h-3" />
-            {issue.commentsCount} {issue.commentsCount === 1 ? "comment" : "comments"}
-          </span>
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs text-[#8e8e93]">
+        <div className="flex items-center gap-2">
+          <SaveIssueButton issue={issue} />
+          <a
+            href={issue.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1c1c20] hover:bg-[#242428] text-[#ededef] font-semibold text-xs transition-colors"
+          >
+            <ExternalLink className="w-3 h-3" />
+            View on GitHub
+          </a>
         </div>
-
-        <a
-          href={issue.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1c1c20] hover:bg-[#242428] text-[#ededef] font-bold text-[11px] transition-colors"
-        >
-          <ExternalLink className="w-3 h-3" />
-          View on GitHub
-        </a>
       </div>
     </div>
   );
 }
 
-// â”€â”€â”€ Dropdown filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Dropdown filter ──────────────────────────────────────────────────────────
 
 function FilterSelect({ label, options, value, onChange, placeholder }) {
   const [open, setOpen] = useState(false);
@@ -223,13 +168,15 @@ function FilterSelect({ label, options, value, onChange, placeholder }) {
   );
 }
 
-// â”€â”€â”€ Main Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ExplorePage() {
+  const routeParamsApplied = useRef(false);
   // Fetch state
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState([]);
+  const [warnings, setWarnings] = useState([]);
   const [rateLimitHit, setRateLimitHit] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
   const [developerProfile, setDeveloperProfile] = useState(null);
@@ -248,33 +195,69 @@ export default function ExplorePage() {
   // Derived filter options from fetched issues
   const filterOptions = useMemo(() => deriveFilterOptions(issues), [issues]);
 
-  // â”€â”€ Fetch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  useEffect(() => {
+    if (warnings.length === 0) return undefined;
+    const timeoutId = window.setTimeout(() => setWarnings([]), 7000);
+    return () => window.clearTimeout(timeoutId);
+  }, [warnings]);
+
+  // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchIssues = useCallback(async () => {
     setLoading(true);
     setErrors([]);
+    setWarnings([]);
     setRateLimitHit(false);
     setVisibleCount(PAGE_SIZE);
 
     try {
       const savedProfile = JSON.parse(localStorage.getItem("developerEligibilityProfile") || "null");
       if (!savedProfile?.username || !savedProfile?.gitHubData) throw new Error("Connect a GitHub profile on the Profile page before evaluating issue eligibility.");
-      setDeveloperProfile(savedProfile);
-      const response = await fetch("/api/github/eligibility", { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", body: JSON.stringify({ username: savedProfile.username, skills: savedProfile.skills || [], experienceLevel: savedProfile.experienceLevel, selectedDomains: savedProfile.selectedDomains || [], refresh: hasFetched }) });
+      const scope = readRecommendationScope();
+      const effectiveProfile = applyDeveloperPersona(savedProfile);
+      setDeveloperProfile({ ...savedProfile, skills: effectiveProfile.skills || [], experienceLevel: effectiveProfile.experienceLevel, selectedDomains: effectiveProfile.selectedDomains || [], isDemoPersona: effectiveProfile.isDemoPersona });
+      const response = await fetch("/api/github/eligibility", { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", body: JSON.stringify({ username: savedProfile.username, skills: effectiveProfile.skills || [], experienceLevel: effectiveProfile.experienceLevel, selectedDomains: effectiveProfile.selectedDomains || [], personaId: getActivePersonaId(), ...scope, refresh: hasFetched }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Unable to fetch GitHub issues.");
       setIssues(result.recommendations || result.issues);
       setDeveloperProfile((profile) => ({ ...profile, evaluatedUsername: result.profile?.username }));
-      setErrors(result.errors);
+      setErrors(result.errors || []);
+      setWarnings(result.warnings || []);
       setRateLimitHit(result.rateLimitHit);
       setHasFetched(true);
     } catch (err) {
       setErrors([err.message || "Unexpected error while collecting issues."]);
+      setWarnings([]);
     } finally {
       setLoading(false);
     }
   }, [hasFetched]);
 
-  // â”€â”€ Filtering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  useEffect(() => {
+    if (routeParamsApplied.current) return;
+    routeParamsApplied.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const repo = params.get("repo") || "";
+    const difficulty = params.get("difficulty") || "";
+    const query = params.get("q") || "";
+    setFilterRepo(repo);
+    setFilterDifficulty(difficulty);
+    setSearchQuery(query);
+    try {
+      const savedProfile = JSON.parse(localStorage.getItem("developerEligibilityProfile") || "null");
+      if (savedProfile?.username && savedProfile?.gitHubData) {
+        window.setTimeout(() => fetchIssues(), 0);
+      }
+    } catch {
+      // Invalid local profile data is handled by the explicit fetch action.
+    }
+  }, [fetchIssues]);
+
+  useEffect(() => {
+    window.addEventListener("osmatcher-persona-change", fetchIssues);
+    return () => window.removeEventListener("osmatcher-persona-change", fetchIssues);
+  }, [fetchIssues]);
+
+  // ── Filtering ─────────────────────────────────────────────────────────────
   const filteredIssues = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return issues.filter((issue) => {
@@ -285,13 +268,13 @@ export default function ExplorePage() {
         const repoMatch  = (issue.repoFullName ?? "").toLowerCase().includes(q);
         if (!titleMatch && !bodyMatch && !repoMatch) return false;
       }
-      // Language filter â€” exact match on repo primary language
+      // Language filter — exact match on repo primary language
       if (filterLanguage && issue.repoLanguage !== filterLanguage) return false;
-      // Repo filter â€” exact match on full repo name (owner/repo)
+      // Repo filter — exact match on full repo name (owner/repo)
       if (filterRepo && issue.repoFullName !== filterRepo) return false;
-      // Label filter â€” issue must have at least one label matching the selection
+      // Label filter — issue must have at least one label matching the selection
       if (filterLabel && !issue.labels.some((l) => l.name === filterLabel)) return false;
-      // Difficulty filter â€” derived from labels, null means unknown; excluded if no match
+      // Difficulty filter — derived from labels, null means unknown; excluded if no match
       const difficulty = issue.requirementExtraction?.estimatedDifficulty?.value || inferDifficulty(issue.labels) || "Unknown";
       if (filterDifficulty && difficulty !== filterDifficulty) return false;
       return true;
@@ -319,22 +302,14 @@ export default function ExplorePage() {
     setVisibleCount(PAGE_SIZE); // Reset pagination so all matching results are visible
   }
 
-  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-7 max-w-5xl mx-auto">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-6 border-b border-[#202024]">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl font-bold tracking-tight text-[#ededef]">Explore Issues</h1>
-            <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-full bg-sky-900 text-sky-300">
-              Stage 4
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-[#71717a] max-w-2xl leading-relaxed">
-            Real open issues are evaluated against {developerProfile?.experienceLevel || "your"} experience, detected GitHub skills, declared skills, and extracted requirements.
-          </p>
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#ededef]">Explore Issues</h1>
         </div>
 
         <button
@@ -348,7 +323,7 @@ export default function ExplorePage() {
           ) : (
             <RefreshCw className="w-3.5 h-3.5" />
           )}
-          {loading ? "Fetching issuesâ€¦" : hasFetched ? "Refresh" : "Fetch Issues"}
+          {loading ? "Fetching issues…" : hasFetched ? "Refresh" : "Fetch Issues"}
         </button>
       </div>
 
@@ -369,23 +344,34 @@ export default function ExplorePage() {
         </div>
       )}
 
-      {/* Search + Filters â€” shown as soon as a fetch has completed */}
+      {warnings.length > 0 && (
+        <div role="status" className="flex items-start justify-between gap-3 rounded-xl border border-white/[0.05] bg-white/[0.015] px-4 py-2.5 text-xs text-[#8e8e93]">
+          <div className="space-y-1">
+            {warnings.map((warning, index) => <p key={`${index}-${warning}`}>{warning}</p>)}
+          </div>
+          <button type="button" onClick={() => setWarnings([])} aria-label="Dismiss information" className="shrink-0 rounded-md p-1 text-[#71717a] hover:text-[#ededef] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ea6c33]">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Search + Filters — shown as soon as a fetch has completed */}
       {hasFetched && (
         <div className="space-y-3">
           {/* Search bar */}
           <div className="relative">
-            <Search className="w-4 h-4 text-[#71717a] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-5 h-5 text-[#8e8e93] absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setVisibleCount(PAGE_SIZE); }}
-              placeholder="Search titles, descriptions or repository namesâ€¦"
-              className="w-full bg-[#1c1c20] text-xs text-[#ededef] pl-10 pr-10 py-2.5 rounded-xl placeholder-[#52525b] focus:outline-none focus:ring-1 focus:ring-white/20 transition-all"
+              placeholder="Search titles, descriptions or repository names…"
+              className="w-full bg-[#1c1c20] text-base text-[#ededef] pl-12 pr-12 py-4 rounded-2xl border border-white/[0.06] placeholder-[#71717a] focus:outline-none focus:ring-2 focus:ring-[#ea6c33]/40 focus:border-[#ea6c33]/30 transition-all"
             />
             {searchQuery && (
               <button
                 type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717a] hover:text-[#ededef] cursor-pointer"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8e8e93] hover:text-[#ededef] cursor-pointer"
                 onClick={() => { setSearchQuery(""); setVisibleCount(PAGE_SIZE); }}
               >
                 <X className="w-3.5 h-3.5" />
@@ -447,7 +433,7 @@ export default function ExplorePage() {
           {Array.from({ length: 5 }).map((_, i) => (
             <div
               key={i}
-              className="glass-card rounded-2xl p-5 animate-pulse space-y-3"
+              className="glass-card rounded-2xl p-6 animate-pulse space-y-4"
               style={{ animationDelay: `${i * 80}ms` }}
             >
               <div className="h-3 bg-white/[0.06] rounded w-1/3" />
@@ -470,11 +456,8 @@ export default function ExplorePage() {
           <div>
             <p className="text-sm font-semibold text-[#ededef]">No issues loaded yet</p>
             <p className="text-xs text-[#71717a] mt-1 max-w-sm mx-auto">
-              Connect a GitHub username on the Profile page, then click <span className="font-bold text-[#ea6c33]">Fetch Issues</span> to collect real issues and evaluate eligibility.
+              Connect a GitHub username on the Profile page to collect real issues and evaluate eligibility.
             </p>
-          </div>
-          <div className="text-[11px] text-[#52525b] font-mono">
-            Unauthenticated: 60 req/hr Â· Authenticated: 5,000 req/hr
           </div>
         </div>
       )}
@@ -504,7 +487,7 @@ export default function ExplorePage() {
 
       {/* Issue grid */}
       {!loading && visibleIssues.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-5">
           {visibleIssues.map((issue) => (
             <IssueCard key={`${issue.repoFullName}-${issue.id}`} issue={issue} developerProfile={developerProfile} />
           ))}
@@ -532,15 +515,19 @@ export default function ExplorePage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {TRACKED_REPOSITORIES.map((repo) => (
-              <a
+              <button
                 key={repo}
-                href={`https://github.com/${repo}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-xl bg-[#1c1c20] hover:bg-[#242428] text-[#8e8e93] hover:text-[#ededef] transition-colors"
+                type="button"
+                onClick={() => {
+                  setFilterRepo((current) => current === repo ? "" : repo);
+                  setVisibleCount(PAGE_SIZE);
+                  if (!hasFetched && !loading) fetchIssues();
+                }}
+                aria-pressed={filterRepo === repo}
+                className={`text-xs font-mono font-bold px-3 py-2 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ea6c33] ${filterRepo === repo ? "bg-[#ea6c33] text-white" : "bg-[#1c1c20] hover:bg-[#242428] text-[#8e8e93] hover:text-[#ededef]"}`}
               >
                 {repo}
-              </a>
+              </button>
             ))}
           </div>
         </div>
