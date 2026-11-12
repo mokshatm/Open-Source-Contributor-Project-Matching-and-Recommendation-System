@@ -17,6 +17,9 @@ async function search(query, profile = null) {
     if (profile) {
       const safeProfile = {
         skills: Array.isArray(profile.skills) ? profile.skills : [],
+        detectedLanguages: Array.isArray(profile.detectedLanguages) ? profile.detectedLanguages : [],
+        detectedTopics: Array.isArray(profile.detectedTopics) ? profile.detectedTopics : [],
+        analyzedReposCount: Number.isFinite(profile.analyzedReposCount) ? profile.analyzedReposCount : undefined,
         experienceLevel: ["Beginner", "Intermediate", "Advanced"].includes(profile.experienceLevel) ? profile.experienceLevel : "Unknown",
         selectedDomains: Array.isArray(profile.selectedDomains) ? profile.selectedDomains : [],
       };

@@ -1,9 +1,20 @@
 
-export const MATCHING_WEIGHTS = Object.freeze({
-  skillCompatibility: 0.4,
-  interestAlignment: 0.25,
-  experienceSuitability: 0.2,
-  requirementRelevance: 0.15,
+export const MATCH_SCORE_MAXIMA = Object.freeze({ skillCompatibility: 50, experienceSuitability: 30, freshness: 20 });
+const GOOD_FIRST_ISSUE_BONUS = 5;
+const RELATED_SKILL_CREDIT = 0.5;
+const FRESHNESS_DECAY_DAYS = 365;
+const REQUIREMENT_CATEGORY_MULTIPLIERS = Object.freeze({
+  programmingLanguages: 1,
+  frameworks: 1,
+  databases: 0.75,
+  technicalConcepts: 0.5,
+});
+const GENERIC_CONCEPT_MULTIPLIERS = Object.freeze({
+  testing: 0.2,
+  documentation: 0.2,
+  docker: 0.35,
+  containers: 0.35,
+  "devops and deployment": 0.35,
 });
 
 const SKILL_ALIASES = Object.freeze({
@@ -47,21 +58,55 @@ const DOMAIN_INTERESTS = Object.freeze({
   "Frontend & UI Engineering": ["Frontend"],
 });
 
-const LEVELS = Object.freeze({ Beginner: 0, Intermediate: 1, Advanced: 2 });
+const LEVELS = Object.freeze({ Beginner: 1, Intermediate: 2, Advanced: 3 });
 const normalize = (value) => {
   const key = String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
   return SKILL_ALIASES[key] || key;
 };
-const clamp = (value) => Math.max(0, Math.min(100, Math.round(value)));
 const lists = (value) => Array.isArray(value) ? value : [];
 const categories = ["programmingLanguages", "frameworks", "databases", "technicalConcepts"];
 
-function profileSkillNames(profile = {}) {
-  return [
-    ...lists(profile.detectedLanguages).map((skill) => skill?.name),
-    ...lists(profile.detectedTopics).map((skill) => typeof skill === "string" ? skill : skill?.name),
-    ...lists(profile.skills).map((skill) => typeof skill === "string" ? skill : skill?.name),
-  ].filter((skill) => typeof skill === "string" && skill.trim());
+function difficultyFromLabels(labels = []) {
+  const text = lists(labels).map((label) => typeof label === "string" ? label : label?.name || "").join(" ").toLowerCase();
+  if (/good[\s_-]+first[\s_-]+issue|beginner|first[- ]timers? only|easy|starter|newcomer/.test(text)) return "Beginner";
+  if (/intermediate|medium|moderate/.test(text)) return "Intermediate";
+  if (/advanced|hard|complex|expert|senior/.test(text)) return "Advanced";
+  return "Unknown";
+}
+
+function profileSkillEvidence(profile = {}) {
+  const skills = [
+    ...lists(profile.detectedLanguages),
+    ...lists(profile.detectedTopics),
+    ...lists(profile.skills),
+  ];
+  const evidence = new Map();
+  for (const skill of skills) {
+    const name = typeof skill === "string" ? skill : skill?.name;
+    if (typeof name !== "string" || !name.trim()) continue;
+    const key = normalize(name);
+    const repoCount = Number(skill?.repoCount);
+    // Preserve raw frequency so dominant repository languages have structural weight.
+    const hasRepositoryEvidence = Number.isFinite(repoCount) && repoCount > 0
+      && (skill?.source === "repository" || skill?.sampleRepos);
+    const weight = hasRepositoryEvidence
+      ? repoCount
+      : 1;
+    evidence.set(key, Math.max(evidence.get(key) || 0, weight));
+  }
+  return evidence;
+}
+
+function profileEvidenceDenominator(profile, skillWeights) {
+  const analyzedRepos = Number(profile.analyzedReposCount ?? profile.gitHubData?.analyzedReposCount);
+  return Number.isFinite(analyzedRepos) && analyzedRepos > 0
+    ? analyzedRepos
+    : [...skillWeights.values()].reduce((sum, weight) => sum + weight, 0);
+}
+
+function requirementMultiplier(requirement) {
+  const name = normalize(requirement.name);
+  return GENERIC_CONCEPT_MULTIPLIERS[name] ?? REQUIREMENT_CATEGORY_MULTIPLIERS[requirement.category] ?? 1;
 }
 
 function issueRequirements(issue) {
@@ -70,10 +115,21 @@ function issueRequirements(issue) {
     .map((skill) => ({ ...skill, category })));
 }
 
-function scoreExperience(profileLevel, difficulty) {
-  if (!LEVELS.hasOwnProperty(profileLevel) || !LEVELS.hasOwnProperty(difficulty)) return null;
-  const gap = LEVELS[difficulty] - LEVELS[profileLevel];
-  return gap <= 0 ? 100 : gap === 1 ? 55 : 25;
+function scoreExperience(profileLevel, difficulty, labels = []) {
+  const userLevel = LEVELS[profileLevel];
+  const issueLevel = LEVELS[difficulty];
+  const hasGoodFirstIssueLabel = lists(labels).some(({ name }) => /good[\s_-]+first[\s_-]+issue/i.test(String(name || "")));
+  const bonus = hasGoodFirstIssueLabel && (profileLevel === "Beginner" || profileLevel === "Intermediate") ? GOOD_FIRST_ISSUE_BONUS : 0;
+  if (userLevel === undefined || issueLevel === undefined) return MATCH_SCORE_MAXIMA.experienceSuitability / 2 + bonus;
+  const normalizedFit = 1 - Math.abs(userLevel - issueLevel) / (Object.keys(LEVELS).length - 1);
+  return Math.round(((MATCH_SCORE_MAXIMA.experienceSuitability - GOOD_FIRST_ISSUE_BONUS) * normalizedFit) + bonus);
+}
+
+function scoreFreshness(updatedAt, now = Date.now()) {
+  const updated = Date.parse(updatedAt || "");
+  if (!Number.isFinite(updated)) return 0;
+  const daysSinceUpdate = Math.max(0, (now - updated) / 86_400_000);
+  return Math.round(MATCH_SCORE_MAXIMA.freshness * Math.max(0, 1 - daysSinceUpdate / FRESHNESS_DECAY_DAYS));
 }
 
 function interestDetails(profile, extraction) {
@@ -96,7 +152,7 @@ export function matchIssueToDeveloper(issue, profile = {}, options = {}) {
   const eligibility = issue?.eligibility || { eligible: false, exclusionReasons: ["Eligibility has not been evaluated."] };
   const empty = {
     score: null,
-    components: { skillCompatibility: null, interestAlignment: null, experienceSuitability: null, requirementRelevance: null },
+    components: { skillCompatibility: null, interestAlignment: null, experienceSuitability: null, requirementRelevance: null, freshness: null },
     matchedSkills: [], relatedSkills: [], missingSkills: [], unfamiliarSkills: [],
     interestAlignment: eligibility.interestAlignment || null,
     experienceSuitability: eligibility.experienceSuitability || null,
@@ -104,12 +160,9 @@ export function matchIssueToDeveloper(issue, profile = {}, options = {}) {
   };
   if (!eligibility.eligible) return { ...empty, eligibility };
 
-  const weights = Object.fromEntries(Object.keys(MATCHING_WEIGHTS).map((key) => [key, options.weights?.[key] ?? MATCHING_WEIGHTS[key]]));
-  const weightSum = Object.values(weights).reduce((sum, weight) => sum + (Number.isFinite(weight) && weight > 0 ? weight : 0), 0);
-  const safeWeights = weightSum ? Object.fromEntries(Object.entries(weights).map(([key, weight]) => [key, Number.isFinite(weight) && weight > 0 ? weight / weightSum : 0])) : MATCHING_WEIGHTS;
   const requirements = issueRequirements(issue);
-  const profileSkills = profileSkillNames(profile);
-  const known = new Set(profileSkills.map(normalize));
+  const skillWeights = profileSkillEvidence(profile);
+  const known = new Set(skillWeights.keys());
   const matchedSkills = [];
   const relatedSkills = [];
   const missingSkills = [];
@@ -120,19 +173,46 @@ export function matchIssueToDeveloper(issue, profile = {}, options = {}) {
     else if ([...known].some((skill) => (RELATED_SKILLS[skill] || []).map(normalize).includes(normalized))) relatedSkills.push(name);
     else missingSkills.push(name);
   }
+  const requirementsBySkill = new Map();
+  for (const requirement of requirements) {
+    const key = normalize(requirement.name);
+    const existing = requirementsBySkill.get(key);
+    if (!existing || requirementMultiplier(requirement) > requirementMultiplier(existing)) {
+      requirementsBySkill.set(key, requirement);
+    }
+  }
+  const uniqueRequirements = [...requirementsBySkill.keys()];
   const matched = new Set(matchedSkills.map(normalize));
   const related = new Set(relatedSkills.map(normalize));
-  const uniqueRequirements = [...new Set(requirements.map((item) => normalize(item.name)))];
-  const skillCompatibility = uniqueRequirements.length && profileSkills.length
-    ? (uniqueRequirements.reduce((score, skill) => score + (matched.has(skill) ? 1 : related.has(skill) ? 0.5 : 0), 0) / uniqueRequirements.length) * 100
-    : null;
+  const totalProfileEvidence = profileEvidenceDenominator(profile, skillWeights);
+  const matchedEvidenceBySkill = new Map(uniqueRequirements.map((skill) => {
+    const relatedWeight = related.has(skill)
+      ? Math.max(0, ...[...known].filter((knownSkill) => (RELATED_SKILLS[knownSkill] || []).map(normalize).includes(skill)).map((knownSkill) => skillWeights.get(knownSkill) || 0)) * RELATED_SKILL_CREDIT
+      : 0;
+    return [skill, Math.max(matched.has(skill) ? skillWeights.get(skill) || 0 : 0, relatedWeight) * requirementMultiplier(requirementsBySkill.get(skill))];
+  }));
+  const matchedEvidence = [...matchedEvidenceBySkill.values()].reduce((sum, weight) => sum + weight, 0);
+  const skillEvidenceCapacity = totalProfileEvidence * uniqueRequirements.length;
+  const skillOverlap = skillEvidenceCapacity > 0
+    ? Math.round(MATCH_SCORE_MAXIMA.skillCompatibility * Math.min(1, matchedEvidence / skillEvidenceCapacity))
+    : 0;
+
+  const byEvidence = (left, right) => (matchedEvidenceBySkill.get(normalize(right)) || 0) - (matchedEvidenceBySkill.get(normalize(left)) || 0)
+    || normalize(left).localeCompare(normalize(right));
+  matchedSkills.sort(byEvidence);
+  relatedSkills.sort(byEvidence);
 
   const interest = interestDetails(profile, issue?.requirementExtraction);
   const experienceSuitability = {
     developerLevel: profile?.experienceLevel || "Unknown",
     issueDifficulty: issue?.requirementExtraction?.estimatedDifficulty?.value || "Unknown",
   };
-  const experience = scoreExperience(experienceSuitability.developerLevel, experienceSuitability.issueDifficulty);
+  const inferredDifficulty = experienceSuitability.issueDifficulty === "Unknown"
+    ? difficultyFromLabels(issue?.labels || [])
+    : experienceSuitability.issueDifficulty;
+  experienceSuitability.issueDifficulty = inferredDifficulty;
+  const experience = scoreExperience(experienceSuitability.developerLevel, inferredDifficulty, issue?.labels);
+  const freshness = scoreFreshness(issue?.updatedAt, options.now);
   const extraction = issue?.requirementExtraction;
   const explicitRequirements = requirements.filter((requirement) => requirement.classification === "explicit").length;
   const requirementRelevance = extraction?.status === "complete" && requirements.length > 0
@@ -141,22 +221,24 @@ export function matchIssueToDeveloper(issue, profile = {}, options = {}) {
       : extraction && extraction.status !== "unavailable" ? 40 : null;
 
   const components = {
-    skillCompatibility,
+    skillCompatibility: skillOverlap,
     interestAlignment: interest.score,
     experienceSuitability: experience,
     requirementRelevance,
+    freshness,
   };
-  // Renormalize over known components so missing profile fields never become guessed zeroes.
-  const scored = Object.entries(components).filter(([key, score]) => score !== null && safeWeights[key] > 0);
-  const denominator = scored.reduce((sum, [key]) => sum + safeWeights[key], 0);
-  const hasPersonalSignal = components.skillCompatibility !== null || components.interestAlignment !== null || components.experienceSuitability !== null;
-  const score = denominator && hasPersonalSignal ? clamp(scored.reduce((sum, [key, value]) => sum + value * safeWeights[key], 0) / denominator) : null;
-  const scoreBreakdown = denominator ? scored.map(([key, value]) => ({
-    component: key,
+  const score = skillOverlap + experience + freshness;
+  const scoreBreakdown = [
+    ["skillCompatibility", skillOverlap],
+    ["experienceSuitability", experience],
+    ["freshness", freshness],
+  ].map(([component, value]) => ({
+    component,
     score: value,
-    weight: safeWeights[key] / denominator,
-    contribution: value * safeWeights[key] / denominator,
-  })) : [];
+    maxScore: MATCH_SCORE_MAXIMA[component],
+    weight: MATCH_SCORE_MAXIMA[component] / 100,
+    contribution: value,
+  }));
 
   const matchedUnique = [...new Set(matchedSkills)];
   const relatedUnique = [...new Set(relatedSkills)];
@@ -166,7 +248,7 @@ export function matchIssueToDeveloper(issue, profile = {}, options = {}) {
   if (relatedUnique.length) explanations.push(`has related experience for ${relatedUnique.join(", ")}`);
   if (requirements.length && !matchedUnique.length && !relatedUnique.length) explanations.push("has no exact or related profile skill matches");
   if (interest.details?.matchedInterests.length) explanations.push(`aligns with ${interest.details.issueDomain} interests`);
-  if (experience !== null) explanations.push(experience >= 100 ? `fits ${experienceSuitability.developerLevel} experience` : `offers a ${experienceSuitability.issueDifficulty.toLowerCase()} learning opportunity`);
+  if (experienceSuitability.developerLevel !== "Unknown" && inferredDifficulty !== "Unknown") explanations.push(`scores ${experience}/30 for ${experienceSuitability.developerLevel} experience against ${inferredDifficulty} complexity`);
   const explanation = explanations.length
     ? `This issue ${explanations.join(" and ")}${missingUnique.length ? `; unfamiliar requirements include ${missingUnique.join(", ")}` : ""}.`
     : "This eligible issue has limited profile alignment; review its extracted requirements before choosing it.";
@@ -174,6 +256,7 @@ export function matchIssueToDeveloper(issue, profile = {}, options = {}) {
   return {
     score,
     components,
+    freshnessScore: freshness,
     scoreBreakdown,
     matchedSkills: matchedUnique,
     relatedSkills: relatedUnique,

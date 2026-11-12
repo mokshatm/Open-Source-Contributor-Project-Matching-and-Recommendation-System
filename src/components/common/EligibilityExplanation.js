@@ -1,9 +1,8 @@
 ﻿const LEVELS = { Beginner: 0, Intermediate: 1, Advanced: 2 };
 const SCORE_FACTORS = {
   skillCompatibility: "Skill overlap",
-  interestAlignment: "Interest alignment",
   experienceSuitability: "Experience fit",
-  requirementRelevance: "Requirement clarity",
+  freshness: "Freshness",
 };
 const ENTRY_LABEL_PATTERN = /good first issue|beginner|newcomer|starter|help wanted|documentation|first[- ]timers?[- ]only/i;
 
@@ -104,17 +103,17 @@ export default function EligibilityExplanation({ issue }) {
         <Section title={`Score Context · ${score}/100`}>
           {scoreFactors.length ? (
             <ul className="space-y-1.5 text-sm text-[#c4c4ca]">
-              {scoreFactors.map(({ component, score: factorScore, weight }) => (
+              {scoreFactors.map(({ component, score: factorScore, maxScore }) => (
                 <li key={component} className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
                   <span>{SCORE_FACTORS[component] || component}</span>
-                  <span className="text-[#a1a1aa]">{formatFactorScore(factorScore)}/100 · {Math.round(weight * 100)}% influence</span>
+                  <span className="text-[#a1a1aa]">{formatFactorScore(factorScore)}/{maxScore} points</span>
                 </li>
               ))}
             </ul>
           ) : (
             <p className="text-sm text-[#a1a1aa]">The recommendation score is available, but its factor details were not returned.</p>
           )}
-          <p className="mt-2 text-xs text-[#71717a]">Repository language, topics, labels, comments, and update time are shown as context; they are not separate score factors.</p>
+          <p className="mt-2 text-xs text-[#71717a]">The total is the exact sum of skill overlap, experience fit, and freshness. Selected interests break ties.</p>
         </Section>
       )}
     </div>

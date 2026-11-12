@@ -7,6 +7,15 @@ export const TRACKED_REPOSITORIES = [
   "rust-lang/rust", "golang/go", "spring-projects/spring-boot", "torvalds/linux", "rails/rails",
 ];
 
+export const ACTIVE_ISSUE_MAX_AGE_DAYS = 365;
+
+export function isFreshOpenIssue(issue, now = Date.now()) {
+  if (String(issue?.state || "").toLowerCase() !== "open" || issue?.pull_request) return false;
+  const updatedAt = Date.parse(issue?.updated_at || issue?.updatedAt || "");
+  if (!Number.isFinite(updatedAt)) return false;
+  return now - updatedAt <= ACTIVE_ISSUE_MAX_AGE_DAYS * 86_400_000;
+}
+
 function normalizeIssue(raw, repo) {
   return {
     id: raw.id, number: raw.number, nodeId: raw.node_id, title: raw.title,
@@ -23,13 +32,16 @@ function normalizeIssue(raw, repo) {
 async function fetchRepoIssues(fullName, repo, perPage, maxPages) {
   const [owner, name] = fullName.split("/");
   const issues = [];
+  const now = Date.now();
   for (let page = 1; page <= maxPages; page += 1) {
     const response = await githubRequest(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/issues?state=open&per_page=${perPage}&page=${page}&sort=updated&direction=desc`);
     const data = await response.json();
     if (!Array.isArray(data)) throw new GitHubApiError(`GitHub returned an unexpected issue response for ${fullName}.`, 502);
     for (const issue of data) {
-      if (!issue.pull_request && issue.title?.trim()) issues.push(normalizeIssue(issue, repo));
+      if (isFreshOpenIssue(issue, now) && issue.title?.trim()) issues.push(normalizeIssue(issue, repo));
     }
+    const lastUpdatedAt = Date.parse(data.at(-1)?.updated_at || "");
+    if (Number.isFinite(lastUpdatedAt) && now - lastUpdatedAt > ACTIVE_ISSUE_MAX_AGE_DAYS * 86_400_000) break;
     if (data.length < perPage) break;
   }
   return issues;

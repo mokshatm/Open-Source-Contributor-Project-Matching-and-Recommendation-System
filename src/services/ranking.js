@@ -10,6 +10,16 @@ function skillScore(issue) {
   return finiteNumber(component) ? component : null;
 }
 
+function interestScore(issue) {
+  const matches = issue?.match?.interestAlignment?.matchedInterests;
+  return Array.isArray(matches) ? matches.length : null;
+}
+
+function freshnessScore(issue) {
+  const component = issue?.match?.components?.freshness;
+  return finiteNumber(component) ? component : null;
+}
+
 function timestamp(issue) {
   if (!issue?.updatedAt) return null;
   const value = Date.parse(issue.updatedAt);
@@ -45,11 +55,17 @@ export function rankRecommendations(issues = []) {
     );
     if (scoreOrder) return scoreOrder;
 
+    const interestOrder = compareKnownFirstDescending(interestScore(left.issue), interestScore(right.issue));
+    if (interestOrder) return interestOrder;
+
     const skillOrder = compareKnownFirstDescending(skillScore(left.issue), skillScore(right.issue));
     if (skillOrder) return skillOrder;
 
     const experienceOrder = compareKnownFirstDescending(experienceScore(left.issue), experienceScore(right.issue));
     if (experienceOrder) return experienceOrder;
+
+    const freshnessOrder = compareKnownFirstDescending(freshnessScore(left.issue), freshnessScore(right.issue));
+    if (freshnessOrder) return freshnessOrder;
 
     const activityOrder = compareKnownFirstDescending(timestamp(left.issue), timestamp(right.issue));
     if (activityOrder) return activityOrder;

@@ -37,6 +37,14 @@ test("score ties use skill fit, then experience, then reliable recency", () => {
   assert.deepEqual(ranked.map((issue) => issue.id), [2, 3, 4, 1]);
 });
 
+test("selected interest alignment breaks equal-score ties", () => {
+  const aligned = candidate(2, { score: 80, skill: 20, experience: 20 });
+  aligned.match.interestAlignment = { matchedInterests: ["Backend"] };
+  const unaligned = candidate(1, { score: 80, skill: 20, experience: 20 });
+
+  assert.deepEqual(rankRecommendations([unaligned, aligned]).map((issue) => issue.id), [2, 1]);
+});
+
 test("unknown scores follow known scores without being changed to zero", () => {
   const unknown = candidate(2, { score: null, skill: null });
   const ranked = rankRecommendations([unknown, candidate(1, { score: 0, skill: 0 })]);

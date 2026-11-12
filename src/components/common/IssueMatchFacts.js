@@ -1,9 +1,8 @@
 const LEVELS = { Beginner: 0, Intermediate: 1, Advanced: 2 };
 const FACTOR_LABELS = {
   skillCompatibility: "Skill overlap",
-  interestAlignment: "Interest alignment",
   experienceSuitability: "Experience fit",
-  requirementRelevance: "Requirement clarity",
+  freshness: "Freshness",
 };
 const ENTRY_LABEL_PATTERN = /good[\s_-]+first[\s_-]+issue|first[- ]timers?[- ]only|help[\s_-]+wanted|beginner|newcomer|documentation/i;
 const ALIASES = { js: "javascript", ts: "typescript", "node.js": "nodejs", "next.js": "nextjs", "vue.js": "vuejs", golang: "go", cpp: "c++" };
@@ -115,11 +114,11 @@ export default function IssueMatchFacts({ issue, profile }) {
         <>
         <ul className="space-y-1.5 text-sm text-[#c4c4ca]">
           {factors.map((factor) => <li key={factor.component} className="flex flex-wrap justify-between gap-x-4">
-            <span>{FACTOR_LABELS[factor.component] || factor.component}: {scoreText(factor.score)}/100</span>
-            <span className="text-[#a1a1aa]">+{scoreText(factor.contribution)} points | {Math.round(factor.weight * 100)}% weight</span>
+            <span>{FACTOR_LABELS[factor.component] || factor.component}: {scoreText(factor.score)}/{factor.maxScore} points</span>
+            <span className="text-[#a1a1aa]">+{scoreText(factor.contribution)} points</span>
           </li>)}
         </ul>
-        {factors.length > 0 && <p className="mt-2 text-xs text-[#8e8e93]">Labels and activity are shown as issue context, not as separate score components.</p>}
+        {factors.length > 0 && <p className="mt-2 text-xs text-[#8e8e93]">The score is the sum of skill overlap, experience fit, and freshness. Selected interests break ties.</p>}
         </>
       ) : <p className="text-sm text-[#a1a1aa]">The matcher returned a score without component details.</p>}
     </Section>
